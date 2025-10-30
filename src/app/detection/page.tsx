@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect } from "react";
 import axios from "axios";
 import ResultTable from "@/components/ResultTable";
+import { addRun, type Detection as SavedDetection } from "@/lib/history";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -20,6 +21,18 @@ export default function DetectionPage() {
   const [results, setResults] = useState<Detection[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
+  const [test, setTest] = useState("");
+
+  const onTest = async () => {
+    try {
+      const res = await axios.get("/api/test");
+      setTest(res.data?.message ?? "");
+    } catch (e: any) {
+      const status = e?.response?.status;
+      const body = e?.response?.data;
+      setTest(`Error ${status ?? ""} ${body?.message ?? ""}`.trim());
+    }
+  };
 
   useEffect(() => {
     if (!file) {
@@ -41,25 +54,25 @@ export default function DetectionPage() {
     if (!ctx) return;
 
     function draw() {
-      const w = img.naturalWidth;
-      const h = img.naturalHeight;
-      canvas.width = w;
-      canvas.height = h;
-      ctx.clearRect(0, 0, w, h);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "#22c55e";
-      ctx.font = "14px sans-serif";
-      ctx.fillStyle = "#22c55e";
+      const w = img!.naturalWidth;
+      const h = img!.naturalHeight;
+      canvas!.width = w;
+      canvas!.height = h;
+      ctx!.clearRect(0, 0, w, h);
+      ctx!.lineWidth = 2;
+      ctx!.strokeStyle = "#22c55e";
+      ctx!.font = "14px sans-serif";
+      ctx!.fillStyle = "#22c55e";
       results.forEach((r) => {
         const [x, y, bw, bh] = r.bbox;
-        ctx.strokeRect(x, y, bw, bh);
+        ctx!.strokeRect(x, y, bw, bh);
         const label = `${r.label} ${(r.confidence * 100).toFixed(1)}%`;
-        ctx.fillText(label, x + 4, Math.max(14, y - 4));
+        ctx!.fillText(label, x + 4, Math.max(14, y - 4));
       });
     }
 
-    if (img.complete) draw();
-    else img.onload = () => draw();
+    if (img!.complete) draw();
+    else img!.onload = () => draw();
   }, [results, preview]);
 
   async function onDetect() {
@@ -70,11 +83,61 @@ export default function DetectionPage() {
     try {
       const form = new FormData();
       form.append("image_file", file);
-      const res = await axios.post("http://localhost:8080/detect", form, {
+      const res = await axios.post("/api/detect", form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      // Expecting an array of detections: { label, confidence, bbox: [x,y,w,h] }
-      setResults(res.data?.detections || res.data || []);
+      // Normalize backend response to { label, confidence, bbox: [x,y,w,h] }
+      const raw = res.data?.detections ?? res.data ?? [];
+      const normalized = Array.isArray(raw)
+        ? raw.map((item: any) => {
+            // If already in object shape, pass through
+            if (
+              item &&
+              typeof item === "object" &&
+              Array.isArray(item.bbox) &&
+              typeof item.label === "string" &&
+              typeof item.confidence === "number"
+            ) {
+              return item;
+            }
+            // Flask returns: [x1,y1,x2,y2,label,prob%]
+            if (Array.isArray(item) && item.length >= 6) {
+              const [x1, y1, x2, y2, label, probStr] = item;
+              const w = Math.max(0, (Number(x2) || 0) - (Number(x1) || 0));
+              const h = Math.max(0, (Number(y2) || 0) - (Number(y1) || 0));
+              const probNum =
+                typeof probStr === "string"
+                  ? Math.min(1, Math.max(0, parseFloat(probStr) / 100))
+                  : typeof probStr === "number"
+                  ? Math.min(1, Math.max(0, probStr))
+                  : 0;
+              return {
+                label: String(label ?? ""),
+                confidence: probNum,
+                bbox: [Number(x1) || 0, Number(y1) || 0, w, h] as [
+                  number,
+                  number,
+                  number,
+                  number
+                ],
+              };
+            }
+            // Fallback safe empty
+            return { label: "", confidence: 0, bbox: [0, 0, 0, 0] };
+          })
+        : [];
+      setResults(normalized);
+      try {
+        const run = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          at: new Date().toISOString(),
+          fileName: file.name ?? "unknown",
+          results: normalized as SavedDetection[],
+        };
+        addRun(run);
+      } catch {
+        // ignore persistence errors
+      }
     } catch (e: any) {
       setError(e?.message || "Detection failed");
     } finally {
@@ -99,7 +162,9 @@ export default function DetectionPage() {
               {loading ? "Detecting..." : "Detect"}
             </Button>
             {error && (
-              <div className="text-sm text-red-600 dark:text-red-400">{error}</div>
+              <div className="text-sm text-red-600 dark:text-red-400">
+                {error}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -111,8 +176,16 @@ export default function DetectionPage() {
             <CardContent>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <div className="relative">
-                <img ref={imgRef} src={preview} alt="preview" className="block w-full h-auto" />
-                <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full" />
+                <img
+                  ref={imgRef}
+                  src={preview}
+                  alt="preview"
+                  className="block w-full h-auto"
+                />
+                <canvas
+                  ref={canvasRef}
+                  className="absolute top-0 left-0 w-full h-full"
+                />
               </div>
             </CardContent>
           </Card>
@@ -132,5 +205,3 @@ export default function DetectionPage() {
     </div>
   );
 }
-
-
