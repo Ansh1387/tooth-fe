@@ -15,13 +15,22 @@ export default function ReportsPage() {
       <div className="flex items-end justify-between gap-3">
         <div>
           <div className="text-xl font-semibold">Reports</div>
-          <div className="text-sm text-black/60 dark:text-white/60">History of your recent analyses</div>
+          <div className="text-sm text-black/60 dark:text-white/60">
+            History of your recent analyses
+          </div>
         </div>
-        <a href="/detection" className="text-xs underline opacity-70 hover:opacity-100">New Analysis</a>
+        <a
+          href="/detection"
+          className="text-xs underline opacity-70 hover:opacity-100"
+        >
+          New Analysis
+        </a>
       </div>
 
       {!runs.length ? (
-        <div className="text-sm text-black/60 dark:text-white/60">No reports yet</div>
+        <div className="text-sm text-black/60 dark:text-white/60">
+          No reports yet
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
           {runs.map((r) => {
@@ -34,7 +43,9 @@ export default function ReportsPage() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{r.fileName}</div>
+                    <div className="text-sm font-medium truncate">
+                      {r.fileName}
+                    </div>
                     <div className="text-xs text-black/60 dark:text-white/60">
                       {new Date(r.at).toLocaleString()} • {total} detections
                     </div>
@@ -57,7 +68,9 @@ export default function ReportsPage() {
                       </span>
                     ))
                   ) : (
-                    <span className="text-xs text-black/60 dark:text-white/60">No issues</span>
+                    <span className="text-xs text-black/60 dark:text-white/60">
+                      No issues
+                    </span>
                   )}
                 </div>
               </div>
